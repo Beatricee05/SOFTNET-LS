@@ -41,7 +41,7 @@ export default function App() {
     () => localStorage.getItem("isLoggedIn") === "true",
   );
 
-  const [licenses, setLicenses] = useState([
+  const initialLicenses = [
     {
       client: "SoftNet Technologies",
       product: "SoftLS Licensing System",
@@ -54,30 +54,36 @@ export default function App() {
       status: "Expiring",
       expiry: "2026-09-01",
     },
-  ]);
+  ];
 
-  const productsList = [
+  const initialProducts = [
     {
       name: "SoftLS Licensing System",
+      code: "SL-SYS",
+      description: "Core software licensing registry, auditing, and compliance manager.",
       category: "License Management",
       version: "v2.0",
       status: "Active",
     },
     {
       name: "Inventory Management System",
+      code: "INV-MGT",
+      description: "Real-time stock tracking, purchase orders, and warehouse analytics catalog.",
       category: "Inventory",
       version: "v1.5",
       status: "Active",
     },
     {
       name: "HR Management System",
+      code: "HR-CORE",
+      description: "Employee records ledger, payroll configurations, and performance metrics system.",
       category: "Human Resources",
       version: "v3.1",
       status: "Inactive",
     },
   ];
 
-  const clientsList = [
+  const initialClients = [
     {
       name: "SoftNet Technologies",
       country: "Tanzania",
@@ -95,6 +101,58 @@ export default function App() {
       products: ["Core Banking"],
     },
   ];
+
+  const [licenses, setLicenses] = useState(() => {
+    const saved = localStorage.getItem("licenses");
+    return saved ? JSON.parse(saved) : initialLicenses;
+  });
+
+  const [products, setProducts] = useState(() => {
+    const saved = localStorage.getItem("products");
+    return saved ? JSON.parse(saved) : initialProducts;
+  });
+
+  const [clients, setClients] = useState(() => {
+    const saved = localStorage.getItem("clients");
+    return saved ? JSON.parse(saved) : initialClients;
+  });
+
+  const [activityLog, setActivityLog] = useState(() => {
+    const saved = localStorage.getItem("activityLog");
+    return saved ? JSON.parse(saved) : [
+      { id: 1, action: "User Login", detail: "Ally Maftah logged in successfully", timestamp: new Date().toLocaleTimeString() },
+      { id: 2, action: "System Check", detail: "Active license status verification completed", timestamp: new Date(Date.now() - 3600000).toLocaleTimeString() }
+    ];
+  });
+
+  const addActivity = (action, detail) => {
+    const newLog = [
+      {
+        id: Date.now(),
+        action,
+        detail,
+        timestamp: new Date().toLocaleTimeString(),
+      },
+      ...activityLog
+    ].slice(0, 15);
+    setActivityLog(newLog);
+    localStorage.setItem("activityLog", JSON.stringify(newLog));
+  };
+
+  const updateLicensesState = (newLicenses) => {
+    setLicenses(newLicenses);
+    localStorage.setItem("licenses", JSON.stringify(newLicenses));
+  };
+
+  const updateProductsState = (newProducts) => {
+    setProducts(newProducts);
+    localStorage.setItem("products", JSON.stringify(newProducts));
+  };
+
+  const updateClientsState = (newClients) => {
+    setClients(newClients);
+    localStorage.setItem("clients", JSON.stringify(newClients));
+  };
 
   const [expiringThreshold] = useState(
     () => new Date(Date.now() + 1000 * 60 * 60 * 24 * 60),
@@ -479,76 +537,166 @@ export default function App() {
           </div>
 
           <div className="content">
-            {page === "dashboard" && (
-              <>
-                <div className="stats">
-                  <StatCard
-                    title="Active Licenses"
-                    value={licenses.filter((l) => l.status === "Active").length}
-                    color="#3b82f6"
-                    icon={<CheckCircle color="#3b82f6" />}
-                  />
+            {page === "dashboard" && (() => {
+              const activeCount = licenses.filter((l) => l.status === "Active" && new Date(l.expiry) >= new Date()).length;
+              const expiringCount = licenses.filter((l) => l.status !== "Suspended" && new Date(l.expiry) >= new Date() && new Date(l.expiry) < expiringThreshold).length;
+              const expiredCount = licenses.filter((l) => l.status !== "Suspended" && new Date(l.expiry) < new Date()).length;
+              const suspendedCount = licenses.filter((l) => l.status === "Suspended").length;
+              
+              // Calculate category stats
+              const getCategoryStats = () => {
+                const stats = {};
+                licenses.forEach((lic) => {
+                  if (lic.status === "Active" && new Date(lic.expiry) >= new Date()) {
+                    const prod = products.find((p) => p.name === lic.product);
+                    const cat = prod ? prod.category : "Other";
+                    stats[cat] = (stats[cat] || 0) + 1;
+                  }
+                });
+                return stats;
+              };
+              const categoryStats = getCategoryStats();
+              const maxVal = Math.max(...Object.values(categoryStats), 1);
+              
+              const totalLics = licenses.length || 1;
+              const activePct = (activeCount / totalLics) * 100;
+              const expiringPct = (expiringCount / totalLics) * 100;
+              const expiredPct = (expiredCount / totalLics) * 100;
+              const suspendedPct = (suspendedCount / totalLics) * 100;
 
-                  <StatCard
-                    title="Expiring Soon"
-                    value={
-                      licenses.filter((l) => new Date(l.expiry) < expiringThreshold)
-                        .length
-                    }
-                    color="#f59e0b"
-                    icon={<AlertTriangle color="#f59e0b" />}
-                  />
+              return (
+                <>
+                  <div className="stats">
+                    <StatCard
+                      title="Active Licenses"
+                      value={activeCount}
+                      color="#10b981"
+                      icon={<CheckCircle color="#10b981" />}
+                    />
 
-                  <StatCard
-                    title="Total Products"
-                    value={productsList.length}
-                    color="#8b5cf6"
-                    icon={<Box color="#8b5cf6" />}
-                  />
+                    <StatCard
+                      title="Expiring Soon"
+                      value={expiringCount}
+                      color="#f59e0b"
+                      icon={<AlertTriangle color="#f59e0b" />}
+                    />
 
-                  <StatCard
-                    title="Expired Keys"
-                    value={
-                      licenses.filter((l) => new Date(l.expiry) < new Date())
-                        .length
-                    }
-                    color="#ef4444"
-                    icon={<X color="#ef4444" />}
-                  />
-                </div>
+                    <StatCard
+                      title="Total Products"
+                      value={products.length}
+                      color="#8b5cf6"
+                      icon={<Box color="#8b5cf6" />}
+                    />
 
-                <div className="charts">
-                  <div className="card">
-                    <h3>Active Licenses per Product Category</h3>
+                    <StatCard
+                      title="Expired Keys"
+                      value={expiredCount}
+                      color="#ef4444"
+                      icon={<X color="#ef4444" />}
+                    />
                   </div>
 
-                  <div className="card">
-                    <h3>License Compliance Share</h3>
-                  </div>
-                </div>
+                  <div className="charts">
+                    <div className="card">
+                      <h3>Active Licenses per Product Category</h3>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "15px", marginTop: "15px" }}>
+                        {Object.entries(categoryStats).map(([cat, val]) => (
+                          <div key={cat}>
+                            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "5px", fontSize: "14px" }}>
+                              <span>{cat}</span>
+                              <strong>{val}</strong>
+                            </div>
+                            <div style={{ background: "#e5e7eb", borderRadius: "10px", height: "8px", overflow: "hidden" }}>
+                              <div style={{ background: "#8b5cf6", width: `${(val / maxVal) * 100}%`, height: "100%", borderRadius: "10px" }} />
+                            </div>
+                          </div>
+                        ))}
+                        {Object.keys(categoryStats).length === 0 && (
+                          <div style={{ color: "#94a3b8", fontSize: "14px", marginTop: "10px" }}>No active licenses found.</div>
+                        )}
+                      </div>
+                    </div>
 
-                <div className="activity">
-                  <div className="activity-header">Recent Activity Log</div>
-
-                  <div className="activity-body">
-                    No actions tracked within this processing window.
+                    <div className="card">
+                      <h3>License Compliance Share</h3>
+                      <div style={{ marginTop: "20px" }}>
+                        <div style={{ display: "flex", height: "24px", borderRadius: "12px", overflow: "hidden", background: "#e5e7eb", marginBottom: "20px" }}>
+                          {activeCount > 0 && <div style={{ background: "#10b981", width: `${activePct}%` }} title={`Active: ${activeCount}`} />}
+                          {expiringCount > 0 && <div style={{ background: "#f59e0b", width: `${expiringPct}%` }} title={`Expiring: ${expiringCount}`} />}
+                          {expiredCount > 0 && <div style={{ background: "#ef4444", width: `${expiredPct}%` }} title={`Expired: ${expiredCount}`} />}
+                          {suspendedCount > 0 && <div style={{ background: "#64748b", width: `${suspendedPct}%` }} title={`Suspended: ${suspendedCount}`} />}
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: "10px", fontSize: "13px" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                            <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#10b981" }} />
+                            Active ({activeCount})
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                            <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#f59e0b" }} />
+                            Expiring ({expiringCount})
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                            <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#ef4444" }} />
+                            Expired ({expiredCount})
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                            <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#64748b" }} />
+                            Suspended ({suspendedCount})
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </>
-            )}
+
+                  <div className="activity">
+                    <div className="activity-header">Recent Activity Log</div>
+
+                    <div className="activity-body" style={{ height: "auto", display: "block", padding: "20px", color: "inherit" }}>
+                      {activityLog.map((log) => (
+                        <div key={log.id} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid #f1f5f9" }}>
+                          <div>
+                            <strong>{log.action}</strong>: <span style={{ color: "#64748b" }}>{log.detail}</span>
+                          </div>
+                          <span style={{ fontSize: "12px", color: "#94a3b8" }}>{log.timestamp}</span>
+                        </div>
+                      ))}
+                      {activityLog.length === 0 && (
+                        <div style={{ color: "#94a3b8", textAlign: "center", padding: "20px" }}>
+                          No actions tracked within this processing window.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
 
             {page === "licenses" && (
               <IssuedLicenses
                 licenses={licenses}
-                onCreate={(newLicense) =>
-                  setLicenses((s) => [newLicense, ...s])
-                }
+                products={products}
+                clients={clients}
+                onLicensesChange={updateLicensesState}
+                addActivity={addActivity}
               />
             )}
 
-            {page === "products" && <Products products={productsList} />}
+            {page === "products" && (
+              <Products
+                products={products}
+                onProductsChange={updateProductsState}
+                addActivity={addActivity}
+              />
+            )}
 
-            {page === "clients" && <ClientsDirectory clients={clientsList} />}
+            {page === "clients" && (
+              <ClientsDirectory
+                clients={clients}
+                products={products}
+                onClientsChange={updateClientsState}
+                addActivity={addActivity}
+              />
+            )}
 
             {showProfile && (
               <Profile
